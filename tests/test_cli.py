@@ -10,7 +10,11 @@ def test_cli_check_dry_run_exits_successfully(
     monkeypatch,
     capsys,
 ) -> None:
+    seen_update_handler = object()
+
     def fake_check_once(_cfg, _notifier, *, update_handler=None):
+        nonlocal seen_update_handler
+        seen_update_handler = update_handler
         return CheckResult(success=True, total_updates=2, seeded_updates=2)
 
     monkeypatch.setattr(cli, "check_once", fake_check_once)
@@ -25,10 +29,11 @@ def test_cli_check_dry_run_exits_successfully(
     )
 
     assert exit_code == 0
+    assert seen_update_handler is None
     assert "success=True" in capsys.readouterr().out
 
 
-def test_cli_check_print_updates_outputs_update(
+def test_cli_check_print_updates_outputs_found_update(
     tmp_path: Path,
     monkeypatch,
     capsys,
@@ -77,10 +82,12 @@ def test_cli_print_updates_env_can_be_disabled_by_arg(
     monkeypatch,
 ) -> None:
     seen_print_flag = None
+    seen_update_handler = object()
 
     def fake_check_once(cfg, _notifier, *, update_handler=None):
-        nonlocal seen_print_flag
+        nonlocal seen_print_flag, seen_update_handler
         seen_print_flag = cfg.print_updates
+        seen_update_handler = update_handler
         return CheckResult(success=True)
 
     monkeypatch.setenv("BESTELLBAR_PRINT_UPDATES", "true")
@@ -98,6 +105,7 @@ def test_cli_print_updates_env_can_be_disabled_by_arg(
 
     assert exit_code == 0
     assert seen_print_flag is False
+    assert seen_update_handler is None
 
 
 def test_cli_invalid_args_exit_non_zero(capsys) -> None:

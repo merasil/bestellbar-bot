@@ -73,14 +73,35 @@ def _find_updates_heading(soup: BeautifulSoup) -> Tag | None:
 
 
 def _find_entry_nodes(container: Tag) -> list[Tag]:
-    direct_nodes = [
+    list_nodes = [
+        candidate
+        for candidate in container.find_all("ol")
+        if isinstance(candidate, Tag)
+    ]
+    list_entries = [_list_entries(list_node) for list_node in list_nodes]
+    parseable_lists = [entries for entries in list_entries if entries]
+    if parseable_lists:
+        return max(parseable_lists, key=len)
+    if list_nodes:
+        return []
+
+    return [
         child
         for child in container.find_all(recursive=False)
+        if (
+            isinstance(child, Tag)
+            and child.name in {"article", "li"}
+            and _node_text(child)
+        )
+    ]
+
+
+def _list_entries(list_node: Tag) -> list[Tag]:
+    return [
+        child
+        for child in list_node.find_all("li", recursive=False)
         if isinstance(child, Tag) and _node_text(child)
     ]
-    if direct_nodes:
-        return direct_nodes
-    return [container] if _node_text(container) else []
 
 
 def _parse_entry(node: Tag, base_url: str) -> Update:

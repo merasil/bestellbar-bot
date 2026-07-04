@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from bestellbar_bot import monitor
 from bestellbar_bot.config import AppConfig
 from bestellbar_bot.monitor import check_once
 from bestellbar_bot.notifiers.base import NotificationError
@@ -67,7 +68,7 @@ def test_check_once_seeds_state_without_notifying_on_first_run(tmp_path: Path) -
     assert result.success is True
     assert result.seeded_updates == 1
     assert notifier.updates == []
-    assert handled == []
+    assert handled == updates
     assert load_state(tmp_path / "state.json").known_fingerprints == {"a"}
 
 
@@ -95,8 +96,34 @@ def test_check_once_notifies_only_new_updates(tmp_path: Path) -> None:
     assert result.success is True
     assert result.new_updates == 1
     assert [update.title for update in notifier.updates] == ["New"]
-    assert [update.title for update in handled] == ["New"]
+    assert [update.title for update in handled] == ["New", "Old"]
     assert load_state(tmp_path / "state.json").known_fingerprints == {"a", "b"}
+
+
+def test_check_once_prints_known_updates_without_notifying(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    updates = [_update("a", "Known")]
+    check_once(
+        cfg,
+        CollectingNotifier(),
+        fetch_func=lambda _url, _timeout, _user_agent: "html",
+        parse_func=lambda _html, _base_url: updates,
+    )
+    notifier = CollectingNotifier()
+    handled: list[Update] = []
+
+    result = check_once(
+        cfg,
+        notifier,
+        fetch_func=lambda _url, _timeout, _user_agent: "html",
+        parse_func=lambda _html, _base_url: updates,
+        update_handler=handled.append,
+    )
+
+    assert result.success is True
+    assert result.new_updates == 0
+    assert notifier.updates == []
+    assert handled == updates
 
 
 def test_check_once_notifies_multiple_updates_in_oldest_first_order(
@@ -117,7 +144,7 @@ def test_check_once_notifies_multiple_updates_in_oldest_first_order(
 
     assert result.success is True
     assert [update.title for update in notifier.updates] == ["Middle", "Newest"]
-    assert [update.title for update in handled] == ["Middle", "Newest"]
+    assert [update.title for update in handled] == ["Newest", "Middle"]
 
 
 def test_check_once_does_not_advance_failed_notification(tmp_path: Path) -> None:
@@ -177,3 +204,25 @@ def test_check_once_returns_failure_without_corrupting_state(tmp_path: Path) -> 
 
     assert result.success is False
     assert not (tmp_path / "state.json").exists()
+
+
+def test_check_once_does_not_call_handler_when_state_save_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fail_save(_path, _state) -> None:
+        raise monitor.StateError("save failed")
+
+    handled: list[Update] = []
+    monkeypatch.setattr(monitor, "save_state", fail_save)
+
+    result = check_once(
+        _cfg(tmp_path),
+        CollectingNotifier(),
+        fetch_func=lambda _url, _timeout, _user_agent: "html",
+        parse_func=lambda _html, _base_url: [_update("a", "Current")],
+        update_handler=handled.append,
+    )
+
+    assert result.success is False
+    assert handled == []

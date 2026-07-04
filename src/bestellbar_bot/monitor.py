@@ -17,7 +17,7 @@ from bestellbar_bot.state import StateError, load_state, save_state
 
 FetchFunc = Callable[[str, float, str], str]
 ParseFunc = Callable[[str, str], list[Update]]
-UpdateHandler = Callable[[Update], None]
+FoundUpdateHandler = Callable[[Update], None]
 
 
 @dataclass(frozen=True)
@@ -38,9 +38,9 @@ def check_once(
     *,
     fetch_func: FetchFunc = fetch_page,
     parse_func: ParseFunc = parse_updates,
-    update_handler: UpdateHandler | None = None,
+    update_handler: FoundUpdateHandler | None = None,
 ) -> CheckResult:
-    """Fetches, parses, notifies, and persists state for one check."""
+    """Fetches, parses, notifies, persists state, and emits found updates."""
     logger = logging.getLogger(__name__)
     try:
         html = fetch_func(cfg.url, cfg.timeout_seconds, cfg.user_agent)
@@ -60,6 +60,7 @@ def check_once(
             except StateError as exc:
                 logger.error("Could not save seeded state: %s", exc)
                 return CheckResult(success=False, error=str(exc))
+        _handle_found_updates(updates, update_handler)
         return CheckResult(
             success=True,
             total_updates=len(updates),
@@ -99,8 +100,6 @@ def check_once(
                     notified_updates=notified,
                     error=str(exc),
                 )
-        if update_handler is not None:
-            update_handler(update)
 
     state.last_success_at = _utc_now()
     if not cfg.dry_run:
@@ -110,6 +109,7 @@ def check_once(
             logger.error("Could not save state: %s", exc)
             return CheckResult(success=False, error=str(exc))
 
+    _handle_found_updates(updates, update_handler)
     return CheckResult(
         success=True,
         total_updates=len(updates),
@@ -140,3 +140,13 @@ def watch(cfg: AppConfig, notifier: Notifier) -> None:
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _handle_found_updates(
+    updates: list[Update],
+    update_handler: FoundUpdateHandler | None,
+) -> None:
+    if update_handler is None:
+        return
+    for update in updates:
+        update_handler(update)

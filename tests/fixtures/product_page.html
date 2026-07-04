@@ -4,20 +4,66 @@
     <main>
       <h2 id="updatesTitle">Online Updates</h2>
       <div class="updates">
-        <article class="update-card info" data-kind="info">
-          <span>Info</span>
-          <h3>Verfügbarkeit zum Wochenende</h3>
-          <p>Neue Ware wird kurzfristig bei mehreren Händlern erwartet.</p>
-          <time datetime="2026-07-03T18:00:00+02:00">03.07.2026 18:00</time>
-          <a href="/r/amazon-de">Amazon DE</a>
-        </article>
-        <article class="update-card availability" data-kind="availability">
-          <span>Availability</span>
-          <h3>Amazon DE verfügbar</h3>
-          <p>Der Midea PortaSplit ist wieder bestellbar.</p>
-          <time datetime="2026-07-04T09:00:00+02:00">04.07.2026 09:00</time>
-          <a href="https://www.amazon.de/example">Zum Angebot</a>
-        </article>
+        <div class="updates-wrapper">
+          <div class="update-filters" aria-label="Update filter">
+            <button type="button">Alle</button>
+            <button type="button">Verfügbarkeit</button>
+            <button type="button">Info</button>
+          </div>
+          <ol class="update-list">
+            <li class="update-row" data-kind="availability">
+              <article>
+                <h3>PortaSplit bei Cyberport verfügbar</h3>
+                <p>Der Midea PortaSplit ist kurzfristig bestellbar.</p>
+                <time>04.07.26 08:42</time>
+                <a href="/r/cyberport">Cyberport</a>
+              </article>
+            </li>
+            <li class="update-row" data-kind="availability">
+              <article>
+                <h3>Amazon DE mit neuer Lieferzeit</h3>
+                <p>Amazon nennt wieder ein konkretes Lieferfenster.</p>
+                <time>04.07.26 08:05</time>
+                <a href="https://www.amazon.de/example">Amazon DE</a>
+              </article>
+            </li>
+            <li class="update-row" data-kind="info">
+              <article>
+                <h3>Preisalarm wurde aktualisiert</h3>
+                <p>Der beobachtete Zielpreis wurde auf mehreren Shops erkannt.</p>
+                <time>04.07.26 07:48</time>
+                <a href="/p/MTpH/midea-portasplit">Bestell.bar</a>
+              </article>
+            </li>
+            <li class="update-row" data-kind="availability">
+              <article>
+                <h3>Otto listet Restbestand</h3>
+                <p>Eine kleine Menge ist wieder im Shop sichtbar.</p>
+                <time>03.07.26 21:30</time>
+                <a href="/r/otto">Otto</a>
+              </article>
+            </li>
+            <li class="update-row" data-kind="warning">
+              <article>
+                <h3>Saturn-Angebot ausverkauft</h3>
+                <p>Das zuvor sichtbare Angebot ist nicht mehr bestellbar.</p>
+                <time>03.07.26 19:12</time>
+                <a href="/r/saturn">Saturn</a>
+              </article>
+            </li>
+            <li class="update-row" data-kind="info">
+              <article>
+                <h3>Verfügbarkeit zum Wochenende</h3>
+                <p>Neue Ware wird kurzfristig bei mehreren Händlern erwartet.</p>
+                <time datetime="2026-07-03T18:00:00+02:00">03.07.2026 18:00</time>
+                <a href="/r/amazon-de">Amazon DE</a>
+              </article>
+            </li>
+          </ol>
+        </div>
+        <div class="load-more-overlay">
+          <button type="button">Mehr laden</button>
+        </div>
       </div>
     </main>
   </body>
