@@ -1,8 +1,33 @@
 from pathlib import Path
+from typing import Any, ClassVar
 
 from bestellbar_bot import cli
 from bestellbar_bot.monitor import CheckResult
+from bestellbar_bot.notifiers.base import NotificationError
 from bestellbar_bot.parser import Update
+
+
+class FakePushoverNotifier:
+    instances: ClassVar[list["FakePushoverNotifier"]] = []
+
+    def __init__(
+        self,
+        *,
+        api_token: str,
+        user_key: str,
+        device: str | None = None,
+        timeout: float = 15.0,
+        **_kwargs: Any,
+    ) -> None:
+        self.api_token = api_token
+        self.user_key = user_key
+        self.device = device
+        self.timeout = timeout
+        self.sent_updates: list[Update] = []
+        FakePushoverNotifier.instances.append(self)
+
+    def send_update(self, update: Update) -> None:
+        self.sent_updates.append(update)
 
 
 def test_cli_check_dry_run_exits_successfully(
@@ -129,3 +154,103 @@ def test_cli_invalid_print_updates_env_exits_non_zero(monkeypatch, capsys) -> No
 
     assert exit_code == 2
     assert "BESTELLBAR_PRINT_UPDATES" in capsys.readouterr().err
+
+
+def test_cli_test_pushover_sends_one_synthetic_notification(
+    monkeypatch,
+    capsys,
+) -> None:
+    FakePushoverNotifier.instances = []
+
+    def fail_check_once(*_args, **_kwargs):
+        raise AssertionError("check_once must not be called")
+
+    def fail_watch(*_args, **_kwargs):
+        raise AssertionError("watch must not be called")
+
+    monkeypatch.setenv("PUSHOVER_API_TOKEN", "token")
+    monkeypatch.setenv("PUSHOVER_USER_KEY", "user")
+    monkeypatch.setattr(cli, "PushoverNotifier", FakePushoverNotifier)
+    monkeypatch.setattr(cli, "check_once", fail_check_once)
+    monkeypatch.setattr(cli, "watch", fail_watch)
+
+    exit_code = cli.main(["test-pushover"])
+    output = capsys.readouterr()
+
+    assert exit_code == 0
+    assert output.out.strip() == "Pushover test notification sent."
+    assert output.err == ""
+    assert len(FakePushoverNotifier.instances) == 1
+    assert len(FakePushoverNotifier.instances[0].sent_updates) == 1
+    update = FakePushoverNotifier.instances[0].sent_updates[0]
+    assert update.fingerprint == "pushover-test"
+    assert update.kind == "test"
+    assert update.source_text == "bestellbar-bot"
+    assert update.url == ""
+
+
+def test_cli_test_pushover_applies_device_timeout_and_message_options(
+    monkeypatch,
+) -> None:
+    FakePushoverNotifier.instances = []
+    monkeypatch.setenv("PUSHOVER_API_TOKEN", "token")
+    monkeypatch.setenv("PUSHOVER_USER_KEY", "user")
+    monkeypatch.setenv("PUSHOVER_DEVICE", "phone")
+    monkeypatch.setattr(cli, "PushoverNotifier", FakePushoverNotifier)
+
+    exit_code = cli.main(
+        [
+            "test-pushover",
+            "--timeout",
+            "3",
+            "--title",
+            "Custom title",
+            "--message",
+            "Custom message",
+        ]
+    )
+
+    assert exit_code == 0
+    notifier = FakePushoverNotifier.instances[0]
+    assert notifier.device == "phone"
+    assert notifier.timeout == 3
+    assert notifier.sent_updates[0].title == "Custom title"
+    assert notifier.sent_updates[0].summary == "Custom message"
+
+
+def test_cli_test_pushover_rejects_missing_credentials(monkeypatch, capsys) -> None:
+    monkeypatch.delenv("PUSHOVER_API_TOKEN", raising=False)
+    monkeypatch.delenv("PUSHOVER_USER_KEY", raising=False)
+
+    exit_code = None
+    try:
+        cli.main(["test-pushover"])
+    except SystemExit as exc:
+        exit_code = exc.code
+
+    assert exit_code == 2
+    assert "PUSHOVER_API_TOKEN" in capsys.readouterr().err
+
+
+def test_cli_test_pushover_reports_notification_failure_without_secrets(
+    monkeypatch,
+    capsys,
+) -> None:
+    class RejectingPushoverNotifier(FakePushoverNotifier):
+        def send_update(self, update: Update) -> None:
+            super().send_update(update)
+            raise NotificationError("rejected secret-token for secret-user")
+
+    monkeypatch.setenv("PUSHOVER_API_TOKEN", "secret-token")
+    monkeypatch.setenv("PUSHOVER_USER_KEY", "secret-user")
+    monkeypatch.setattr(cli, "PushoverNotifier", RejectingPushoverNotifier)
+
+    exit_code = cli.main(["test-pushover"])
+    output = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "Pushover test notification failed" in output.err
+    assert "[redacted]" in output.err
+    assert "secret-token" not in output.err
+    assert "secret-user" not in output.err
+    assert output.out == ""

@@ -3,7 +3,11 @@ from typing import Any
 import pytest
 
 from bestellbar_bot.notifiers.base import NotificationError
-from bestellbar_bot.notifiers.pushover import PushoverNotifier
+from bestellbar_bot.notifiers.pushover import (
+    PushoverNotifier,
+    build_test_update,
+    send_test_notification,
+)
 from bestellbar_bot.parser import Update
 
 
@@ -84,3 +88,32 @@ def test_pushover_raises_for_rejected_json_response() -> None:
 
     with pytest.raises(NotificationError, match="bad user"):
         notifier.send_update(_update())
+
+
+def test_build_test_update_uses_synthetic_fields() -> None:
+    update = build_test_update(title="Test title", message="Test message")
+
+    assert update.fingerprint == "pushover-test"
+    assert update.kind == "test"
+    assert update.title == "Test title"
+    assert update.summary == "Test message"
+    assert update.timestamp_text == ""
+    assert update.source_text == "bestellbar-bot"
+    assert update.url == ""
+
+
+def test_send_test_notification_sends_exactly_one_update() -> None:
+    class RecordingNotifier:
+        def __init__(self) -> None:
+            self.updates: list[Update] = []
+
+        def send_update(self, update: Update) -> None:
+            self.updates.append(update)
+
+    notifier = RecordingNotifier()
+
+    send_test_notification(notifier, title="Test title", message="Test message")
+
+    assert len(notifier.updates) == 1
+    assert notifier.updates[0].title == "Test title"
+    assert notifier.updates[0].summary == "Test message"

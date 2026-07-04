@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from bestellbar_bot.config import ConfigError, load_config
+from bestellbar_bot.config import ConfigError, load_config, load_pushover_config
 
 
 def test_load_config_reads_required_pushover_env(tmp_path: Path) -> None:
@@ -97,3 +97,33 @@ def test_load_config_cli_can_disable_print_updates_env() -> None:
 def test_load_config_rejects_invalid_print_updates_env() -> None:
     with pytest.raises(ConfigError, match="BESTELLBAR_PRINT_UPDATES"):
         load_config({"dry_run": True}, {"BESTELLBAR_PRINT_UPDATES": "maybe"})
+
+
+def test_load_pushover_config_reads_relevant_values() -> None:
+    cfg = load_pushover_config(
+        {"timeout": 3},
+        {
+            "PUSHOVER_API_TOKEN": " token ",
+            "PUSHOVER_USER_KEY": " user ",
+            "PUSHOVER_DEVICE": " phone ",
+            "BESTELLBAR_URL": "not-a-url",
+        },
+    )
+
+    assert cfg.api_token == "token"
+    assert cfg.user_key == "user"
+    assert cfg.device == "phone"
+    assert cfg.timeout_seconds == 3
+
+
+def test_load_pushover_config_rejects_missing_credentials() -> None:
+    with pytest.raises(ConfigError, match="PUSHOVER_API_TOKEN"):
+        load_pushover_config({}, {"PUSHOVER_API_TOKEN": " ", "PUSHOVER_USER_KEY": ""})
+
+
+def test_load_pushover_config_rejects_non_positive_timeout() -> None:
+    with pytest.raises(ConfigError, match="greater than zero"):
+        load_pushover_config(
+            {"timeout": 0},
+            {"PUSHOVER_API_TOKEN": "token", "PUSHOVER_USER_KEY": "user"},
+        )

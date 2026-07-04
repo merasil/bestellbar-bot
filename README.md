@@ -46,6 +46,21 @@ Dry-run without Pushover credentials:
 bestellbar-bot check --dry-run --state-file ./bestellbar-bot-state.json
 ```
 
+Send one real Pushover test notification without checking Bestell.bar or
+touching state:
+
+```bash
+bestellbar-bot test-pushover
+```
+
+The test command uses `PUSHOVER_API_TOKEN`, `PUSHOVER_USER_KEY`,
+`PUSHOVER_DEVICE`, and `BESTELLBAR_TIMEOUT`. You can override the notification
+text for manual checks:
+
+```bash
+bestellbar-bot test-pushover --title "bestellbar-bot" --message "Pushover works"
+```
+
 The first non-dry run seeds the current Online Updates without sending
 notifications. Use `--notify-existing` if existing visible updates should also
 be sent. Printing is independent from the Pushover transport but follows the
@@ -101,6 +116,12 @@ Run a one-shot dry run without Pushover credentials:
 
 ```bash
 docker compose run --rm bestellbar-bot bestellbar-bot check --dry-run --state-file /tmp/state.json
+```
+
+Send one real Pushover test notification using the Compose environment:
+
+```bash
+docker compose run --rm bestellbar-bot bestellbar-bot test-pushover
 ```
 
 On the first non-dry run, the bot seeds the currently visible Online Updates

@@ -7,10 +7,12 @@ from typing import Any
 
 import httpx
 
-from bestellbar_bot.notifiers.base import NotificationError
+from bestellbar_bot.notifiers.base import NotificationError, Notifier
 from bestellbar_bot.parser import Update
 
 PUSHOVER_API_URL = "https://api.pushover.net/1/messages.json"
+DEFAULT_TEST_TITLE = "bestellbar-bot test notification"
+DEFAULT_TEST_MESSAGE = "Pushover is configured correctly for bestellbar-bot."
 
 
 @dataclass
@@ -86,3 +88,30 @@ def _raise_for_pushover_error(resp: httpx.Response) -> None:
             detail = "; ".join(str(error) for error in errors)
             raise NotificationError(f"Pushover rejected the request: {detail}")
         raise NotificationError("Pushover rejected the request.")
+
+
+def build_test_update(
+    *,
+    title: str = DEFAULT_TEST_TITLE,
+    message: str = DEFAULT_TEST_MESSAGE,
+) -> Update:
+    """Builds the synthetic update used for manual Pushover verification."""
+    return Update(
+        fingerprint="pushover-test",
+        kind="test",
+        title=title,
+        summary=message,
+        timestamp_text="",
+        source_text="bestellbar-bot",
+        url="",
+    )
+
+
+def send_test_notification(
+    notifier: Notifier,
+    *,
+    title: str = DEFAULT_TEST_TITLE,
+    message: str = DEFAULT_TEST_MESSAGE,
+) -> None:
+    """Sends exactly one synthetic Pushover test notification."""
+    notifier.send_update(build_test_update(title=title, message=message))

@@ -35,6 +35,16 @@ class AppConfig:
     pushover_device: str | None
 
 
+@dataclass(frozen=True)
+class PushoverConfig:
+    """Pushover-only configuration for test notifications."""
+
+    api_token: str
+    user_key: str
+    device: str | None
+    timeout_seconds: float
+
+
 def default_state_file() -> Path:
     """Returns the default state file path."""
     state_root = os.environ.get("XDG_STATE_HOME")
@@ -108,6 +118,37 @@ def load_config(
         pushover_token=pushover_token,
         pushover_user_key=pushover_user_key,
         pushover_device=pushover_device,
+    )
+
+
+def load_pushover_config(
+    overrides: Mapping[str, object] | None = None,
+    env: Mapping[str, str] | None = None,
+) -> PushoverConfig:
+    """Loads Pushover configuration for a standalone test notification."""
+    values = overrides or {}
+    env_values = env or os.environ
+
+    timeout = _get_float(
+        values,
+        "timeout",
+        env_values.get("BESTELLBAR_TIMEOUT"),
+        DEFAULT_TIMEOUT_SECONDS,
+    )
+    _validate_positive(timeout, "timeout")
+
+    api_token = _clean_optional(env_values.get("PUSHOVER_API_TOKEN"))
+    user_key = _clean_optional(env_values.get("PUSHOVER_USER_KEY"))
+    device = _clean_optional(env_values.get("PUSHOVER_DEVICE"))
+
+    if not api_token or not user_key:
+        raise ConfigError("PUSHOVER_API_TOKEN and PUSHOVER_USER_KEY are required.")
+
+    return PushoverConfig(
+        api_token=api_token,
+        user_key=user_key,
+        device=device,
+        timeout_seconds=timeout,
     )
 
 

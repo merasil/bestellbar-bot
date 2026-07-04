@@ -7,10 +7,21 @@ import logging
 import sys
 from collections.abc import Sequence
 
-from bestellbar_bot.config import AppConfig, ConfigError, load_config
+from bestellbar_bot.config import (
+    AppConfig,
+    ConfigError,
+    PushoverConfig,
+    load_config,
+    load_pushover_config,
+)
 from bestellbar_bot.monitor import CheckResult, check_once, watch
-from bestellbar_bot.notifiers.base import DryRunNotifier, Notifier
-from bestellbar_bot.notifiers.pushover import PushoverNotifier
+from bestellbar_bot.notifiers.base import DryRunNotifier, NotificationError, Notifier
+from bestellbar_bot.notifiers.pushover import (
+    DEFAULT_TEST_MESSAGE,
+    DEFAULT_TEST_TITLE,
+    PushoverNotifier,
+    send_test_notification,
+)
 from bestellbar_bot.output import get_update_printer
 
 
@@ -19,6 +30,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     _configure_logging(args.log_level)
+
+    if args.command == "test-pushover":
+        return _run_test_pushover(args, parser)
 
     try:
         cfg = load_config(vars(args))
@@ -50,6 +64,9 @@ def build_parser() -> argparse.ArgumentParser:
     for command in ("check", "watch"):
         command_parser = subparsers.add_parser(command)
         _add_common_options(command_parser)
+
+    test_parser = subparsers.add_parser("test-pushover")
+    _add_test_pushover_options(test_parser)
 
     return parser
 
@@ -83,6 +100,26 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_test_pushover_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--timeout", type=float, help="HTTP timeout in seconds.")
+    parser.add_argument(
+        "--title",
+        default=DEFAULT_TEST_TITLE,
+        help="Notification title for the Pushover test.",
+    )
+    parser.add_argument(
+        "--message",
+        default=DEFAULT_TEST_MESSAGE,
+        help="Notification message for the Pushover test.",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Logging verbosity.",
+    )
+
+
 def _configure_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level),
@@ -103,6 +140,51 @@ def _build_notifier(cfg: AppConfig) -> Notifier:
         device=cfg.pushover_device,
         timeout=cfg.timeout_seconds,
     )
+
+
+def _run_test_pushover(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> int:
+    try:
+        cfg = load_pushover_config(vars(args))
+        title = _required_text(args.title, "title")
+        message = _required_text(args.message, "message")
+    except ConfigError as exc:
+        parser.error(str(exc))
+
+    notifier = _build_pushover_notifier(cfg)
+    try:
+        send_test_notification(notifier, title=title, message=message)
+    except NotificationError as exc:
+        error = _redact_secrets(str(exc), [cfg.api_token, cfg.user_key])
+        print(f"Pushover test notification failed: {error}", file=sys.stderr)
+        return 1
+
+    print("Pushover test notification sent.")
+    return 0
+
+
+def _build_pushover_notifier(cfg: PushoverConfig) -> PushoverNotifier:
+    return PushoverNotifier(
+        api_token=cfg.api_token,
+        user_key=cfg.user_key,
+        device=cfg.device,
+        timeout=cfg.timeout_seconds,
+    )
+
+
+def _required_text(value: object, name: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    raise ConfigError(f"{name} must not be empty.")
+
+
+def _redact_secrets(message: str, secrets: Sequence[str]) -> str:
+    clean_message = message
+    for secret in secrets:
+        if secret:
+            clean_message = clean_message.replace(secret, "[redacted]")
+    return clean_message
 
 
 def _print_check_result(result: CheckResult) -> None:
