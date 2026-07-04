@@ -33,7 +33,7 @@ def test_cli_check_dry_run_exits_successfully(
     assert "success=True" in capsys.readouterr().out
 
 
-def test_cli_check_print_updates_outputs_found_update(
+def test_cli_check_print_updates_outputs_new_update_line(
     tmp_path: Path,
     monkeypatch,
     capsys,
@@ -72,8 +72,8 @@ def test_cli_check_print_updates_outputs_found_update(
 
     assert exit_code == 0
     assert seen_print_flag is True
-    assert "Update: New stock update" in output
-    assert "Summary: Available now" in output
+    assert "2026-07-04 - Bestell.bar" in output
+    assert "Summary: Available now" not in output
     assert "success=True" in output
 
 

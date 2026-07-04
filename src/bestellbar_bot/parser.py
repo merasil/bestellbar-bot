@@ -19,6 +19,8 @@ _TIMESTAMP_RE = re.compile(
     r"\d{1,2}:\d{2}|\d{4}-\d{2}-\d{2})\b",
     re.IGNORECASE,
 )
+_PRICE_SEPARATOR_RE = re.compile(r"(\d+)\s+,\s+(\d+\s*€)")
+_SOURCE_RELATIONS = {"bei", "von"}
 
 
 class ParseError(RuntimeError):
@@ -30,6 +32,16 @@ class Update:
     """A normalized Online Updates entry."""
 
     fingerprint: str
+    kind: str
+    title: str
+    summary: str
+    timestamp_text: str
+    source_text: str
+    url: str
+
+
+@dataclass(frozen=True)
+class _ParsedEntry:
     kind: str
     title: str
     summary: str
@@ -105,6 +117,87 @@ def _list_entries(list_node: Tag) -> list[Tag]:
 
 
 def _parse_entry(node: Tag, base_url: str) -> Update:
+    parsed_entry = _parse_structured_entry(node, base_url)
+    if parsed_entry is None:
+        parsed_entry = _parse_fallback_entry(node, base_url)
+
+    fingerprint = _fingerprint(
+        {
+            "kind": parsed_entry.kind,
+            "title": parsed_entry.title,
+            "summary": parsed_entry.summary,
+            "timestamp_text": parsed_entry.timestamp_text,
+            "source_text": parsed_entry.source_text,
+            "url": parsed_entry.url,
+        }
+    )
+    return Update(
+        fingerprint=fingerprint,
+        kind=parsed_entry.kind,
+        title=parsed_entry.title,
+        summary=parsed_entry.summary,
+        timestamp_text=parsed_entry.timestamp_text,
+        source_text=parsed_entry.source_text,
+        url=parsed_entry.url,
+    )
+
+
+def _parse_structured_entry(node: Tag, base_url: str) -> _ParsedEntry | None:
+    time_node = node.find("time")
+    source_node = node.select_one("span.truncate.tw-ej")
+    if not isinstance(time_node, Tag) or not isinstance(source_node, Tag):
+        return None
+
+    header_node = time_node.parent if isinstance(time_node.parent, Tag) else None
+    if header_node is None:
+        return None
+
+    header_lines = _text_lines(header_node)
+    kind = _first_header_span_text(header_node)
+    if not kind:
+        return None
+
+    timestamp_text = _clean_timestamp_text(_node_text(time_node))
+    if not timestamp_text:
+        datetime_value = time_node.get("datetime")
+        if isinstance(datetime_value, str):
+            timestamp_text = _clean_timestamp_text(datetime_value)
+
+    source_name = _node_text(source_node)
+    relation = _find_source_relation(header_lines)
+    body_lines = _structured_body_lines(node, header_lines)
+    title = body_lines[0] if body_lines else _join_non_empty([kind, source_name])
+    detail_text = _format_detail_lines(_structured_detail_lines(kind, body_lines))
+    extra_header_text = _format_detail_lines(
+        _header_detail_lines(
+            header_lines,
+            kind=kind,
+            relation=relation,
+            source_name=source_name,
+            timestamp_text=timestamp_text,
+        )
+    )
+    summary = _structured_summary(
+        kind=kind,
+        detail_text=detail_text,
+        extra_header_text=extra_header_text,
+    )
+    source_text = _join_non_empty(
+        [kind, relation, source_name, detail_text, extra_header_text]
+    )
+    url = _detect_url(node, base_url)
+
+    return _ParsedEntry(
+        kind=kind,
+        title=title,
+        summary=summary,
+        timestamp_text=timestamp_text,
+        source_text=source_text,
+        url=url,
+    )
+
+
+def _parse_fallback_entry(node: Tag, base_url: str) -> _ParsedEntry:
     lines = _text_lines(node)
     if not lines:
         raise ParseError("Online Updates entry has no text.")
@@ -116,27 +209,11 @@ def _parse_entry(node: Tag, base_url: str) -> Update:
     title = _node_text(title_node) if isinstance(title_node, Tag) else lines[0]
     kind = _detect_kind(node, lines, title)
     timestamp_text = _detect_timestamp(node, lines)
-    link_node = node.find("a", href=True)
-    url = ""
-    source_text = ""
-    if isinstance(link_node, Tag):
-        href = str(link_node.get("href", ""))
-        url = urljoin(base_url, href)
-        source_text = _node_text(link_node)
+    url = _detect_url(node, base_url)
+    source_text = _detect_fallback_source(node)
 
     summary = _build_summary(lines, title, kind, timestamp_text)
-    fingerprint = _fingerprint(
-        {
-            "kind": kind,
-            "title": title,
-            "summary": summary,
-            "timestamp_text": timestamp_text,
-            "source_text": source_text,
-            "url": url,
-        }
-    )
-    return Update(
-        fingerprint=fingerprint,
+    return _ParsedEntry(
         kind=kind,
         title=title,
         summary=summary,
@@ -149,7 +226,9 @@ def _parse_entry(node: Tag, base_url: str) -> Update:
 def _text_lines(node: Tag) -> list[str]:
     text = node.get_text("\n", strip=True)
     return [
-        _normalize_text(line) for line in text.splitlines() if _normalize_text(line)
+        clean_line
+        for line in text.splitlines()
+        if (clean_line := _normalize_text(line)) and clean_line != "•"
     ]
 
 
@@ -193,14 +272,117 @@ def _iter_classes(node: Tag) -> Iterable[str]:
 def _detect_timestamp(node: Tag, lines: list[str]) -> str:
     time_node = node.find("time")
     if isinstance(time_node, Tag):
+        timestamp_text = _clean_timestamp_text(_node_text(time_node))
+        if timestamp_text:
+            return timestamp_text
         datetime_value = time_node.get("datetime")
         if isinstance(datetime_value, str) and datetime_value.strip():
-            return _normalize_text(datetime_value)
-        return _node_text(time_node)
+            return _clean_timestamp_text(datetime_value)
 
     for line in lines:
         if _TIMESTAMP_RE.search(line):
             return line
+    return ""
+
+
+def _clean_timestamp_text(value: str) -> str:
+    return _normalize_text(value).lstrip("• ").strip()
+
+
+def _first_header_span_text(header_node: Tag) -> str:
+    for span in header_node.find_all("span"):
+        if isinstance(span, Tag):
+            text = _node_text(span)
+            if text:
+                return text
+    return ""
+
+
+def _find_source_relation(header_lines: list[str]) -> str:
+    for line in header_lines:
+        if line.casefold() in _SOURCE_RELATIONS:
+            return line
+    return ""
+
+
+def _structured_body_lines(node: Tag, header_lines: list[str]) -> list[str]:
+    remaining_lines = _remove_lines(_text_lines(node), header_lines)
+    return [line for line in remaining_lines if line]
+
+
+def _remove_lines(lines: list[str], omitted_lines: list[str]) -> list[str]:
+    remaining_omissions = omitted_lines.copy()
+    kept_lines: list[str] = []
+    for line in lines:
+        try:
+            remaining_omissions.remove(line)
+        except ValueError:
+            kept_lines.append(line)
+    return kept_lines
+
+
+def _header_detail_lines(
+    header_lines: list[str],
+    *,
+    kind: str,
+    relation: str,
+    source_name: str,
+    timestamp_text: str,
+) -> list[str]:
+    omitted = {kind, relation, source_name, "Neu", "Uhr", ""}
+    detail_lines: list[str] = []
+    for line in header_lines:
+        if line in omitted:
+            continue
+        if line.casefold() in _SOURCE_RELATIONS:
+            continue
+        if timestamp_text and line in timestamp_text:
+            continue
+        detail_lines.append(line)
+    return detail_lines
+
+
+def _format_detail_lines(lines: list[str]) -> str:
+    return _PRICE_SEPARATOR_RE.sub(r"\1,\2", _join_non_empty(lines))
+
+
+def _structured_detail_lines(kind: str, body_lines: list[str]) -> list[str]:
+    if kind.casefold() == "info":
+        return body_lines[:1]
+    return body_lines
+
+
+def _structured_summary(
+    *,
+    kind: str,
+    detail_text: str,
+    extra_header_text: str,
+) -> str:
+    if kind.casefold() == "info":
+        return ""
+    return _join_non_empty([detail_text, extra_header_text])
+
+
+def _join_non_empty(values: Iterable[str]) -> str:
+    return _normalize_text(" ".join(value for value in values if value))
+
+
+def _detect_url(node: Tag, base_url: str) -> str:
+    link_node = node.find("a", href=True)
+    if not isinstance(link_node, Tag):
+        return ""
+    href = str(link_node.get("href", ""))
+    return urljoin(base_url, href)
+
+
+def _detect_fallback_source(node: Tag) -> str:
+    source_node = node.select_one("span.truncate.tw-ej")
+    if isinstance(source_node, Tag):
+        return _node_text(source_node)
+
+    link_node = node.find("a", href=True)
+    if isinstance(link_node, Tag):
+        return _node_text(link_node)
     return ""
 
 

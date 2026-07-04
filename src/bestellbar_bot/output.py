@@ -11,17 +11,14 @@ UpdatePrinter = Callable[[Update], None]
 
 
 def format_update(update: Update) -> str:
-    """Formats one update for a concise log stream entry."""
-    lines = [f"Update: {update.title}"]
-    if update.summary:
-        lines.append(f"Summary: {update.summary}")
-    if update.timestamp_text:
-        lines.append(f"Time: {update.timestamp_text}")
+    """Formats one update as a single stdout line."""
+    if update.timestamp_text and update.source_text:
+        return f"{update.timestamp_text} - {update.source_text}"
     if update.source_text:
-        lines.append(f"Source: {update.source_text}")
-    if update.url:
-        lines.append(f"URL: {update.url}")
-    return "\n".join(lines)
+        return update.source_text
+    if update.timestamp_text:
+        return update.timestamp_text
+    return update.title
 
 
 def print_update(update: Update) -> None:

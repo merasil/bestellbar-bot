@@ -11,14 +11,24 @@ def test_parse_updates_reads_following_updates_div() -> None:
     updates = parse_updates(FIXTURE.read_text(encoding="utf-8"))
 
     assert len(updates) == 6
-    assert updates[0].kind == "availability"
-    assert updates[0].title == "PortaSplit bei Cyberport verfügbar"
-    assert "kurzfristig bestellbar" in updates[0].summary
-    assert updates[0].timestamp_text == "04.07.26 08:42"
-    assert updates[0].source_text == "Cyberport"
-    assert updates[0].url == "https://www.bestell.bar/r/cyberport"
-    assert updates[1].title == "Amazon DE mit neuer Lieferzeit"
-    assert updates[5].timestamp_text == "2026-07-03T18:00:00+02:00"
+    assert updates[0].kind == "Info"
+    assert updates[0].title == "Verfügbarkeit zum Wochenende"
+    assert updates[0].summary == ""
+    assert updates[0].timestamp_text == "04.07.26, 08:42 Uhr"
+    assert updates[0].source_text == "Info von Fabian Rohr Verfügbarkeit zum Wochenende"
+    assert "long article body" not in updates[0].source_text
+    assert updates[1].kind == "Ausverkauft"
+    assert updates[1].source_text == (
+        "Ausverkauft bei Amazon DE Midea PortaSplit Pfirsich 17 Min. verfügbar"
+    )
+    assert updates[2].kind == "Bestellbar"
+    assert updates[2].title == "Midea PortaSplit Pfirsich"
+    assert updates[2].summary == "Midea PortaSplit Pfirsich 899,10€"
+    assert updates[2].source_text == (
+        "Bestellbar bei Amazon DE Midea PortaSplit Pfirsich 899,10€"
+    )
+    assert updates[2].url.startswith("https://www.bestell.bar/go/link/295")
+    assert updates[5].timestamp_text == "03.07.26, 17:20 Uhr"
 
 
 def test_parse_updates_ignores_filters_and_load_more() -> None:

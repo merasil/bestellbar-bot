@@ -60,7 +60,6 @@ def check_once(
             except StateError as exc:
                 logger.error("Could not save seeded state: %s", exc)
                 return CheckResult(success=False, error=str(exc))
-        _handle_found_updates(updates, update_handler)
         return CheckResult(
             success=True,
             total_updates=len(updates),
@@ -109,7 +108,7 @@ def check_once(
             logger.error("Could not save state: %s", exc)
             return CheckResult(success=False, error=str(exc))
 
-    _handle_found_updates(updates, update_handler)
+    _handle_found_updates(unseen_updates, update_handler)
     return CheckResult(
         success=True,
         total_updates=len(updates),

@@ -73,7 +73,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         "--print-updates",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="Print found updates to stdout.",
+        help="Print new updates to stdout.",
     )
     parser.add_argument(
         "--log-level",

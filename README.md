@@ -34,7 +34,7 @@ Run continuously:
 bestellbar-bot watch --interval 60
 ```
 
-Print found updates to stdout:
+Print new updates to stdout:
 
 ```bash
 bestellbar-bot watch --print-updates
@@ -48,9 +48,10 @@ bestellbar-bot check --dry-run --state-file ./bestellbar-bot-state.json
 
 The first non-dry run seeds the current Online Updates without sending
 notifications. Use `--notify-existing` if existing visible updates should also
-be sent. Printing is independent from notifications: `--print-updates` prints
-the currently found Online Updates on every successful check, including the
-first-run seed and already-known updates.
+be sent. Printing is independent from the Pushover transport but follows the
+same new-update detection: `--print-updates` prints one line for each newly
+handled update only. The first-run seed without `--notify-existing` is quiet,
+and already-known updates are not printed again.
 
 ## Docker Compose
 
@@ -76,9 +77,10 @@ Follow logs:
 docker compose logs -f
 ```
 
-Set `BESTELLBAR_PRINT_UPDATES=true` in `.env` to print the currently found
-Online Updates to stdout on every successful check, which makes them visible in
-`docker compose logs -f` without changing the container command.
+Set `BESTELLBAR_PRINT_UPDATES=true` in `.env` to print newly handled Online
+Updates to stdout, which makes them visible in `docker compose logs -f` without
+changing the container command. Output uses one line per update, for example
+`04.07.26, 07:48 Uhr - Bestellbar bei Amazon DE Midea PortaSplit Pfirsich 899,10€`.
 
 Stop the bot:
 
@@ -104,8 +106,8 @@ docker compose run --rm bestellbar-bot bestellbar-bot check --dry-run --state-fi
 On the first non-dry run, the bot seeds the currently visible Online Updates
 without sending notifications. Add `--notify-existing` to a manual command if
 those existing updates should be sent as notifications. With print mode enabled,
-seeded and already-known updates are printed during successful checks even when
-they are not sent as notifications.
+only newly handled updates are printed. Seeded and already-known updates stay
+quiet.
 
 ## Configuration
 
@@ -118,7 +120,7 @@ CLI options override environment variables.
 | Poll interval | `BESTELLBAR_INTERVAL` | `60` |
 | Request timeout | `BESTELLBAR_TIMEOUT` | `15` |
 | User agent | `BESTELLBAR_USER_AGENT` | `bestellbar-bot/0.1 (+https://www.bestell.bar/)` |
-| Print found updates to stdout | `BESTELLBAR_PRINT_UPDATES` | `false` |
+| Print new updates to stdout | `BESTELLBAR_PRINT_UPDATES` | `false` |
 | Pushover token | `PUSHOVER_API_TOKEN` | required unless `--dry-run` |
 | Pushover user key | `PUSHOVER_USER_KEY` | required unless `--dry-run` |
 | Pushover device | `PUSHOVER_DEVICE` | optional |
