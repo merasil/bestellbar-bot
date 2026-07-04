@@ -1,0 +1,19 @@
+services:
+  bestellbar-bot:
+    build:
+      context: .
+    image: bestellbar-bot:local
+    restart: unless-stopped
+    environment:
+      BESTELLBAR_STATE_FILE: /data/state.json
+      BESTELLBAR_INTERVAL: ${BESTELLBAR_INTERVAL:-60}
+      BESTELLBAR_TIMEOUT: ${BESTELLBAR_TIMEOUT:-15}
+      BESTELLBAR_URL: ${BESTELLBAR_URL:-https://www.bestell.bar/p/MTpH/midea-portasplit}
+      PUSHOVER_API_TOKEN: ${PUSHOVER_API_TOKEN:-}
+      PUSHOVER_USER_KEY: ${PUSHOVER_USER_KEY:-}
+      PUSHOVER_DEVICE: ${PUSHOVER_DEVICE:-}
+    volumes:
+      - bestellbar-bot-state:/data
+
+volumes:
+  bestellbar-bot-state:
