@@ -11,11 +11,13 @@ from datetime import UTC, datetime
 from bestellbar_bot.config import AppConfig
 from bestellbar_bot.fetcher import FetchError, fetch_page
 from bestellbar_bot.notifiers.base import NotificationError, Notifier
+from bestellbar_bot.output import get_update_printer
 from bestellbar_bot.parser import ParseError, Update, parse_updates
 from bestellbar_bot.state import StateError, load_state, save_state
 
 FetchFunc = Callable[[str, float, str], str]
 ParseFunc = Callable[[str, str], list[Update]]
+UpdateHandler = Callable[[Update], None]
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,7 @@ def check_once(
     *,
     fetch_func: FetchFunc = fetch_page,
     parse_func: ParseFunc = parse_updates,
+    update_handler: UpdateHandler | None = None,
 ) -> CheckResult:
     """Fetches, parses, notifies, and persists state for one check."""
     logger = logging.getLogger(__name__)
@@ -96,6 +99,8 @@ def check_once(
                     notified_updates=notified,
                     error=str(exc),
                 )
+        if update_handler is not None:
+            update_handler(update)
 
     state.last_success_at = _utc_now()
     if not cfg.dry_run:
@@ -116,9 +121,10 @@ def check_once(
 def watch(cfg: AppConfig, notifier: Notifier) -> None:
     """Runs checks continuously until interrupted."""
     logger = logging.getLogger(__name__)
+    update_handler = get_update_printer(cfg.print_updates)
     try:
         while True:
-            result = check_once(cfg, notifier)
+            result = check_once(cfg, notifier, update_handler=update_handler)
             if result.success:
                 logger.info(
                     "Check complete: total=%s new=%s notified=%s seeded=%s",

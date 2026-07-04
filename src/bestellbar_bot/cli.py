@@ -11,6 +11,7 @@ from bestellbar_bot.config import AppConfig, ConfigError, load_config
 from bestellbar_bot.monitor import CheckResult, check_once, watch
 from bestellbar_bot.notifiers.base import DryRunNotifier, Notifier
 from bestellbar_bot.notifiers.pushover import PushoverNotifier
+from bestellbar_bot.output import get_update_printer
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -26,7 +27,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     notifier = _build_notifier(cfg)
     if args.command == "check":
-        result = check_once(cfg, notifier)
+        result = check_once(
+            cfg,
+            notifier,
+            update_handler=get_update_printer(cfg.print_updates),
+        )
         _print_check_result(result)
         return 0 if result.success else 1
     if args.command == "watch":
@@ -63,6 +68,12 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         "--dry-run",
         action="store_true",
         help="Do not send Pushover notifications or write state.",
+    )
+    parser.add_argument(
+        "--print-updates",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Print newly found updates to stdout.",
     )
     parser.add_argument(
         "--log-level",

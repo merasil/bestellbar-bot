@@ -31,6 +31,7 @@ def test_load_config_allows_missing_pushover_credentials_for_dry_run() -> None:
 
     assert cfg.dry_run is True
     assert cfg.pushover_token is None
+    assert cfg.print_updates is False
 
 
 @pytest.mark.parametrize("key", ["interval", "timeout"])
@@ -47,11 +48,13 @@ def test_load_config_applies_cli_overrides(tmp_path: Path) -> None:
             "state_file": str(tmp_path / "custom.json"),
             "interval": 12,
             "timeout": 3,
+            "print_updates": True,
         },
         {
             "BESTELLBAR_URL": "https://ignored.example",
             "BESTELLBAR_INTERVAL": "60",
             "BESTELLBAR_TIMEOUT": "15",
+            "BESTELLBAR_PRINT_UPDATES": "false",
         },
     )
 
@@ -59,3 +62,38 @@ def test_load_config_applies_cli_overrides(tmp_path: Path) -> None:
     assert cfg.state_file == tmp_path / "custom.json"
     assert cfg.interval_seconds == 12
     assert cfg.timeout_seconds == 3
+    assert cfg.print_updates is True
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
+def test_load_config_reads_enabled_print_updates_env(value: str) -> None:
+    cfg = load_config(
+        {"dry_run": True},
+        {"BESTELLBAR_PRINT_UPDATES": value},
+    )
+
+    assert cfg.print_updates is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off"])
+def test_load_config_reads_disabled_print_updates_env(value: str) -> None:
+    cfg = load_config(
+        {"dry_run": True},
+        {"BESTELLBAR_PRINT_UPDATES": value},
+    )
+
+    assert cfg.print_updates is False
+
+
+def test_load_config_cli_can_disable_print_updates_env() -> None:
+    cfg = load_config(
+        {"dry_run": True, "print_updates": False},
+        {"BESTELLBAR_PRINT_UPDATES": "true"},
+    )
+
+    assert cfg.print_updates is False
+
+
+def test_load_config_rejects_invalid_print_updates_env() -> None:
+    with pytest.raises(ConfigError, match="BESTELLBAR_PRINT_UPDATES"):
+        load_config({"dry_run": True}, {"BESTELLBAR_PRINT_UPDATES": "maybe"})

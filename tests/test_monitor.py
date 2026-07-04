@@ -18,7 +18,12 @@ class CollectingNotifier:
         self.updates.append(update)
 
 
-def _cfg(tmp_path: Path, *, notify_existing: bool = False) -> AppConfig:
+def _cfg(
+    tmp_path: Path,
+    *,
+    notify_existing: bool = False,
+    dry_run: bool = False,
+) -> AppConfig:
     return AppConfig(
         url="https://example.com/product",
         state_file=tmp_path / "state.json",
@@ -26,7 +31,8 @@ def _cfg(tmp_path: Path, *, notify_existing: bool = False) -> AppConfig:
         timeout_seconds=15,
         user_agent="test",
         notify_existing=notify_existing,
-        dry_run=False,
+        dry_run=dry_run,
+        print_updates=False,
         pushover_token="token",
         pushover_user_key="user",
         pushover_device=None,
@@ -48,17 +54,20 @@ def _update(fingerprint: str, title: str) -> Update:
 def test_check_once_seeds_state_without_notifying_on_first_run(tmp_path: Path) -> None:
     notifier = CollectingNotifier()
     updates = [_update("a", "Old")]
+    handled: list[Update] = []
 
     result = check_once(
         _cfg(tmp_path),
         notifier,
         fetch_func=lambda _url, _timeout, _user_agent: "html",
         parse_func=lambda _html, _base_url: updates,
+        update_handler=handled.append,
     )
 
     assert result.success is True
     assert result.seeded_updates == 1
     assert notifier.updates == []
+    assert handled == []
     assert load_state(tmp_path / "state.json").known_fingerprints == {"a"}
 
 
@@ -73,17 +82,20 @@ def test_check_once_notifies_only_new_updates(tmp_path: Path) -> None:
     )
     notifier = CollectingNotifier()
     second_updates = [_update("b", "New"), _update("a", "Old")]
+    handled: list[Update] = []
 
     result = check_once(
         cfg,
         notifier,
         fetch_func=lambda _url, _timeout, _user_agent: "html",
         parse_func=lambda _html, _base_url: second_updates,
+        update_handler=handled.append,
     )
 
     assert result.success is True
     assert result.new_updates == 1
     assert [update.title for update in notifier.updates] == ["New"]
+    assert [update.title for update in handled] == ["New"]
     assert load_state(tmp_path / "state.json").known_fingerprints == {"a", "b"}
 
 
@@ -93,16 +105,19 @@ def test_check_once_notifies_multiple_updates_in_oldest_first_order(
     cfg = _cfg(tmp_path, notify_existing=True)
     notifier = CollectingNotifier()
     updates_newest_first = [_update("c", "Newest"), _update("b", "Middle")]
+    handled: list[Update] = []
 
     result = check_once(
         cfg,
         notifier,
         fetch_func=lambda _url, _timeout, _user_agent: "html",
         parse_func=lambda _html, _base_url: updates_newest_first,
+        update_handler=handled.append,
     )
 
     assert result.success is True
     assert [update.title for update in notifier.updates] == ["Middle", "Newest"]
+    assert [update.title for update in handled] == ["Middle", "Newest"]
 
 
 def test_check_once_does_not_advance_failed_notification(tmp_path: Path) -> None:
@@ -114,15 +129,40 @@ def test_check_once_does_not_advance_failed_notification(tmp_path: Path) -> None
         parse_func=lambda _html, _base_url: [_update("a", "Old")],
     )
 
+    handled: list[Update] = []
+
     result = check_once(
         cfg,
         CollectingNotifier(fail_after=0),
         fetch_func=lambda _url, _timeout, _user_agent: "html",
         parse_func=lambda _html, _base_url: [_update("b", "New"), _update("a", "Old")],
+        update_handler=handled.append,
     )
 
     assert result.success is False
+    assert handled == []
     assert load_state(tmp_path / "state.json").known_fingerprints == {"a"}
+
+
+def test_check_once_calls_handler_in_dry_run_when_notifier_succeeds(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg(tmp_path, notify_existing=True, dry_run=True)
+    notifier = CollectingNotifier()
+    handled: list[Update] = []
+
+    result = check_once(
+        cfg,
+        notifier,
+        fetch_func=lambda _url, _timeout, _user_agent: "html",
+        parse_func=lambda _html, _base_url: [_update("a", "Current")],
+        update_handler=handled.append,
+    )
+
+    assert result.success is True
+    assert [update.title for update in notifier.updates] == ["Current"]
+    assert [update.title for update in handled] == ["Current"]
+    assert not (tmp_path / "state.json").exists()
 
 
 def test_check_once_returns_failure_without_corrupting_state(tmp_path: Path) -> None:

@@ -29,6 +29,7 @@ class AppConfig:
     user_agent: str
     notify_existing: bool
     dry_run: bool
+    print_updates: bool
     pushover_token: str | None
     pushover_user_key: str | None
     pushover_device: str | None
@@ -52,6 +53,12 @@ def load_config(
 
     dry_run = _get_bool(values, "dry_run", default=False)
     notify_existing = _get_bool(values, "notify_existing", default=False)
+    print_updates = _get_bool_env(
+        values,
+        "print_updates",
+        env_values.get("BESTELLBAR_PRINT_UPDATES"),
+        default=False,
+    )
     url = _get_str(values, "url") or env_values.get("BESTELLBAR_URL") or DEFAULT_URL
     interval = _get_float(
         values,
@@ -97,6 +104,7 @@ def load_config(
         user_agent=user_agent,
         notify_existing=notify_existing,
         dry_run=dry_run,
+        print_updates=print_updates,
         pushover_token=pushover_token,
         pushover_user_key=pushover_user_key,
         pushover_device=pushover_device,
@@ -117,6 +125,30 @@ def _get_bool(values: Mapping[str, object], key: str, *, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     raise ConfigError(f"{key} must be a boolean value.")
+
+
+def _get_bool_env(
+    values: Mapping[str, object],
+    key: str,
+    env_value: str | None,
+    *,
+    default: bool,
+) -> bool:
+    value = values.get(key)
+    if value is not None:
+        if isinstance(value, bool):
+            return value
+        raise ConfigError(f"{key} must be a boolean value.")
+
+    if env_value is None or not env_value.strip():
+        return default
+
+    normalized = env_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError("BESTELLBAR_PRINT_UPDATES must be a boolean value.")
 
 
 def _get_str(values: Mapping[str, object], key: str) -> str | None:
